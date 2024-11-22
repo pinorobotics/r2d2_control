@@ -1,0 +1,79 @@
+plugins {
+  id 'java'
+  id 'com.diffplug.spotless' version '6.25.0'
+}
+
+repositories {
+  mavenLocal()
+  mavenCentral()
+}
+
+apply plugin : 'eclipse'
+
+eclipse.classpath.file {
+  // instruct eclipse plugin to put everything to module path
+  whenMerged {
+    entries.findAll { it.kind == 'lib' }.each { it.entryAttributes['module'] = 'true' }
+  }
+}
+
+dependencies {
+  implementation "io.github.lambdaprime:jros2client:11.0-SNAPSHOT"
+  implementation "io.github.pinorobotics:jros2control:1.0-SNAPSHOT"
+  implementation "io.github.pinorobotics:drac:1.0-SNAPSHOT"
+}
+
+def zzJavaVersion = 22
+sourceCompatibility = zzJavaVersion
+targetCompatibility = zzJavaVersion
+
+jar {
+  archiveFileName = "r2d2_control.jar"
+  manifest { 
+    attributes "Implementation-Version": "${rootProject.version}",
+      "Main-Class": "pinorobotics.r2d2.control.Dorna2JointTrajectoryControllerApp"
+  }
+  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+  from {
+    configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+  }
+}
+
+// setup spotless config for all subprojects
+spotless {
+  java {
+    importOrder()
+    removeUnusedImports()
+
+    // Use Android style which has 4 whitespaces instead 2 by default
+    googleJavaFormat().aosp().reflowLongStrings()
+
+    licenseHeader '''/*
+ * Copyright $YEAR pinorobotics
+ * 
+ * Website: https://github.com/pinorobotics
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+'''
+  }
+}
+
+// run spotless and format code before the build
+classes.dependsOn spotlessApply
+
+// gradlew requires execution of gradle-wrapper.jar which trustworthy needs to
+// be checked everytime when it is updated (otherwise it do not seems secure)
+// To avoid using it we rely on manual version check
+if ("$gradle.gradleVersion" != "8.10.1")
+   throw new RuntimeException("Running gradle version $gradle.gradleVersion, required 8.10.1");
