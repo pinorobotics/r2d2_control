@@ -4,4 +4,5 @@ module r2d2.control {
     requires jros2messages;
     requires id.xfunction;
     requires jrosclient;
+    requires drac;
 }
