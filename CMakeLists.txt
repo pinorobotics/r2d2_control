@@ -5,4 +5,4 @@ find_package(ament_cmake REQUIRED)
 
 ament_package()
 
-install(DIRECTORY launch build/libs DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY build/libs DESTINATION share/${PROJECT_NAME})

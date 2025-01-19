@@ -18,9 +18,8 @@ eclipse.classpath.file {
 }
 
 dependencies {
-  implementation "io.github.lambdaprime:jros2client:11.0-SNAPSHOT"
   implementation "io.github.pinorobotics:jros2control:1.0-SNAPSHOT"
-  implementation "io.github.pinorobotics:drac:1.0-SNAPSHOT"
+  implementation "io.github.pinorobotics:drac:2.0-SNAPSHOT"
 }
 
 def zzJavaVersion = 22
@@ -51,7 +50,7 @@ spotless {
     licenseHeader '''/*
  * Copyright $YEAR pinorobotics
  * 
- * Website: https://github.com/pinorobotics
+ * Website: https://github.com/pinorobotics/r2d2
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
