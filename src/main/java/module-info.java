@@ -12,4 +12,7 @@ module r2d2.control {
     requires jros2messages;
     requires id.xfunction;
     requires drac;
+    requires io.opentelemetry.sdk.metrics;
+    requires id.opentelemetry.exporters.pack;
+    requires io.opentelemetry.sdk;
 }

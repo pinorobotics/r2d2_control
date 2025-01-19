@@ -20,6 +20,8 @@ eclipse.classpath.file {
 dependencies {
   implementation "io.github.pinorobotics:jros2control:1.0-SNAPSHOT"
   implementation "io.github.pinorobotics:drac:2.0-SNAPSHOT"
+  implementation "io.opentelemetry:opentelemetry-api:1.43.0"
+  implementation "io.github.lambdaprime:id.opentelemetry-exporters-pack:4.0"
 }
 
 def zzJavaVersion = 22
