@@ -40,6 +40,19 @@ jar {
   }
 }
 
+task copyReadme(type: Copy) {
+  from("README.md")
+  into("$buildDir/resources/main")
+  rename ("README.md", "README-r2d2.md")
+  doLast {
+    assert file("$buildDir/resources/main/README-r2d2.md").exists()
+  }
+}
+
+// overwrite template README which comes from resources folder
+jar.dependsOn copyReadme
+javadoc.dependsOn copyReadme
+
 // setup spotless config for all subprojects
 spotless {
   java {

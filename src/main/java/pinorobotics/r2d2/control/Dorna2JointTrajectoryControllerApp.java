@@ -21,11 +21,15 @@ import id.jros2client.JRos2ClientConfiguration;
 import id.jros2client.JRos2ClientFactory;
 import id.jroscommon.RosName;
 import id.opentelemetry.exporters.ElasticsearchMetricExporter;
+import id.xfunction.ResourceUtils;
+import id.xfunction.cli.ArgumentParsingException;
 import id.xfunction.cli.CommandLineInterface;
+import id.xfunction.cli.CommandOptions;
 import id.xfunction.logging.XLogger;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.metrics.export.PeriodicMetricReader;
+import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Arrays;
@@ -45,25 +49,45 @@ import pinorobotics.jros2control.joint_trajectory_controller.JointTrajectoryCont
  * @author aeon_flux aeon_flux@eclipso.ch
  */
 public class Dorna2JointTrajectoryControllerApp {
+    private static final XLogger LOGGER =
+            XLogger.getLogger(Dorna2JointTrajectoryControllerApp.class);
     private static final int DEFAULT_BROADCASTER_RATE_IN_MILLIS = 100;
+    private static final String DEFAULT_DORNA_URL = "ws://192.168.0.3:443";
+    private static final String DEFAULT_ELASTICSEARCH_URL = "https://127.0.0.1:9200";
+    private static final String DEFAULT_CONTROLLER_NAME = "dorna2_arm_controller";
+
     // from ros2_controllers.yaml
     private static final List<String> joints =
             List.of("Joint_0", "Joint_1", "Joint_2", "Joint_3", "Joint_4");
 
-    private static String dornaUrl = "ws://192.168.0.3:443";
-    private static String opentelemetryUrl = "https://127.0.0.1:9200";
-    private static RosName controllerName = new RosName("dorna2_arm_controller");
+    private String dornaUrl;
+    private String elasticUrl;
+    private RosName controllerName;
+    private Duration broadcasterRate;
+
+    public Dorna2JointTrajectoryControllerApp(CommandOptions properties) {
+        dornaUrl = properties.getOption("dornaUrl").orElse(DEFAULT_DORNA_URL);
+        elasticUrl =
+                properties.getOption("exportMetricsToElastic").orElse(DEFAULT_ELASTICSEARCH_URL);
+        controllerName =
+                new RosName(properties.getOption("controllerName").orElse(DEFAULT_CONTROLLER_NAME));
+        broadcasterRate =
+                Duration.ofMillis(
+                        properties
+                                .getOptionInt("broadcastRateInMillis")
+                                .orElse(DEFAULT_BROADCASTER_RATE_IN_MILLIS));
+    }
 
     /** Setup OpenTelemetry to send metrics to Elasticsearch */
-    private static void setupMetrics() {
-        var elasticUrl =
+    private void setupMetrics() {
+        var elasticUri =
                 URI.create(
-                        Optional.ofNullable(System.getenv("ELASTIC_URL")).orElse(opentelemetryUrl)
+                        Optional.ofNullable(System.getenv("ELASTIC_URL")).orElse(elasticUrl)
                                 + "/r2d2_control");
         var metricReader =
                 PeriodicMetricReader.builder(
                                 new ElasticsearchMetricExporter(
-                                        elasticUrl, Optional.empty(), Duration.ofSeconds(5), true))
+                                        elasticUri, Optional.empty(), Duration.ofSeconds(5), true))
                         .setInterval(Duration.ofSeconds(3))
                         .build();
         var sdkMeterProvider =
@@ -71,8 +95,7 @@ public class Dorna2JointTrajectoryControllerApp {
         OpenTelemetrySdk.builder().setMeterProvider(sdkMeterProvider).buildAndRegisterGlobal();
     }
 
-    public static void main(String[] args) {
-        XLogger.load("logging-r2d2-control-debug.properties");
+    private void run() {
         // initial_positions.yaml
         var initialPositions = List.of(3.0815, 3.0815, -2.3783, 2.261, 0.0);
         setupMetrics();
@@ -102,7 +125,7 @@ public class Dorna2JointTrajectoryControllerApp {
                                 client,
                                 joints,
                                 Optional.of(() -> toJointState(dornaClient.getLastMotion())),
-                                Duration.ofMillis(DEFAULT_BROADCASTER_RATE_IN_MILLIS));
+                                broadcasterRate);
                 var controller =
                         new JointTrajectoryControllerFactory()
                                 .create(
@@ -120,11 +143,33 @@ public class Dorna2JointTrajectoryControllerApp {
         // printing messages indefinitely
     }
 
-    private static JointState toJointState(Motion motion) {
+    private JointState toJointState(Motion motion) {
         var j = motion.joints().toArrayOfRadians();
         return new JointState(
                 joints,
                 Arrays.copyOf(j, joints.size()),
                 Arrays.copyOf(new double[] {motion.vel()}, joints.size()));
+    }
+
+    private static void usage() throws IOException {
+        new ResourceUtils().readResourceAsStream("README-r2d2.md").forEach(System.out::println);
+    }
+
+    public static void main(String[] args) throws IOException {
+        CommandOptions properties = null;
+        try {
+            properties = CommandOptions.collectOptions(args);
+            if (properties.getOption("h").isPresent() || properties.getOption("help").isPresent())
+                throw new ArgumentParsingException("");
+        } catch (ArgumentParsingException e) {
+            usage();
+            return;
+        }
+        XLogger.load(
+                properties.isOptionTrue("debug")
+                        ? "logging-r2d2-control-debug.properties"
+                        : "logging-r2d2-control.properties");
+        LOGGER.fine("Input arguments {0}", properties);
+        new Dorna2JointTrajectoryControllerApp(properties).run();
     }
 }
