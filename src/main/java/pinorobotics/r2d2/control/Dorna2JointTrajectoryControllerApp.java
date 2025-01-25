@@ -31,10 +31,14 @@ import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.metrics.export.PeriodicMetricReader;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map.Entry;
 import java.util.Optional;
+import java.util.function.Function;
 import pinorobotics.drac.DornaClientConfig;
 import pinorobotics.drac.DornaClientFactory;
 import pinorobotics.drac.DornaRobotModel;
@@ -44,6 +48,9 @@ import pinorobotics.jros2control.joint_trajectory_controller.ActuatorHardware;
 import pinorobotics.jros2control.joint_trajectory_controller.ActuatorHardware.JointState;
 import pinorobotics.jros2control.joint_trajectory_controller.JointStateBroadcaster;
 import pinorobotics.jros2control.joint_trajectory_controller.JointTrajectoryControllerFactory;
+import pinorobotics.jros2moveit.moveit_config.MoveItConfigUtils;
+import pinorobotics.jros2moveit.moveit_config.models.Ros2Controller;
+import pinorobotics.jros2moveit.moveit_config.models.RosParameters;
 
 /**
  * @author aeon_flux aeon_flux@eclipso.ch
@@ -53,22 +60,19 @@ public class Dorna2JointTrajectoryControllerApp {
             XLogger.getLogger(Dorna2JointTrajectoryControllerApp.class);
     private static final int DEFAULT_BROADCASTER_RATE_IN_MILLIS = 100;
     private static final String DEFAULT_DORNA_URL = "ws://192.168.0.3:443";
-    private static final String DEFAULT_ELASTICSEARCH_URL = "https://127.0.0.1:9200";
     private static final String DEFAULT_CONTROLLER_NAME = "dorna2_arm_controller";
 
-    // from ros2_controllers.yaml
-    private static final List<String> joints =
-            List.of("Joint_0", "Joint_1", "Joint_2", "Joint_3", "Joint_4");
-
+    private MoveItConfigUtils moveItConfigUtils = new MoveItConfigUtils();
     private String dornaUrl;
     private String elasticUrl;
     private RosName controllerName;
     private Duration broadcasterRate;
+    private Path moveitConfigPath;
+    private List<String> joints = List.of();
 
     public Dorna2JointTrajectoryControllerApp(CommandOptions properties) {
         dornaUrl = properties.getOption("dornaUrl").orElse(DEFAULT_DORNA_URL);
-        elasticUrl =
-                properties.getOption("exportMetricsToElastic").orElse(DEFAULT_ELASTICSEARCH_URL);
+        elasticUrl = properties.getOption("exportMetricsToElastic").orElse("");
         controllerName =
                 new RosName(properties.getOption("controllerName").orElse(DEFAULT_CONTROLLER_NAME));
         broadcasterRate =
@@ -76,18 +80,26 @@ public class Dorna2JointTrajectoryControllerApp {
                         properties
                                 .getOptionInt("broadcastRateInMillis")
                                 .orElse(DEFAULT_BROADCASTER_RATE_IN_MILLIS));
+        moveitConfigPath =
+                Paths.get(properties.getOption("moveItConfigPath").orElse("../r2d2_moveit_config"));
     }
 
     /** Setup OpenTelemetry to send metrics to Elasticsearch */
     private void setupMetrics() {
         var elasticUri =
-                URI.create(
-                        Optional.ofNullable(System.getenv("ELASTIC_URL")).orElse(elasticUrl)
-                                + "/r2d2_control");
+                Optional.ofNullable(System.getenv("METRICS_ELASTIC_URL")).orElse(elasticUrl);
+        if (elasticUri.isBlank()) {
+            LOGGER.warning("Metrics are ignored because metrics URL is blank");
+            return;
+        }
+
         var metricReader =
                 PeriodicMetricReader.builder(
                                 new ElasticsearchMetricExporter(
-                                        elasticUri, Optional.empty(), Duration.ofSeconds(5), true))
+                                        URI.create(elasticUri + "/r2d2_control"),
+                                        Optional.empty(),
+                                        Duration.ofSeconds(5),
+                                        true))
                         .setInterval(Duration.ofSeconds(3))
                         .build();
         var sdkMeterProvider =
@@ -96,8 +108,39 @@ public class Dorna2JointTrajectoryControllerApp {
     }
 
     private void run() {
-        // initial_positions.yaml
-        var initialPositions = List.of(3.0815, 3.0815, -2.3783, 2.261, 0.0);
+        var moveItConfig = moveItConfigUtils.read(moveitConfigPath);
+        joints =
+                Optional.ofNullable(moveItConfig.ros2Controllers().get(controllerName.name()))
+                        .map(Ros2Controller::ros__parameters)
+                        .map(RosParameters::joints)
+                        .orElseThrow(
+                                () ->
+                                        new RuntimeException(
+                                                "Could not find joints inside moveit_configs for"
+                                                        + " controller "
+                                                        + controllerName));
+        Function<String, RuntimeException> exceptionFactory =
+                jointName ->
+                        new RuntimeException(
+                                "Joint with name "
+                                        + jointName
+                                        + " is not listed among joints of controller "
+                                        + controllerName);
+        // sort initial positions with respect to "joints"
+        var initialPositions =
+                moveItConfig.initialPositions().initialPositions().entrySet().stream()
+                        .sorted(
+                                (e1, e2) -> {
+                                    var joint1 = e1.getKey();
+                                    var pos1 = joints.indexOf(joint1);
+                                    if (pos1 == -1) throw exceptionFactory.apply(joint1);
+                                    var joint2 = e2.getKey();
+                                    var pos2 = joints.indexOf(joint2);
+                                    if (pos2 == -1) throw exceptionFactory.apply(joint2);
+                                    return pos1 - pos2;
+                                })
+                        .map(Entry::getValue)
+                        .toList();
         setupMetrics();
         var dornaConfig =
                 new DornaClientConfig.Builder(URI.create(dornaUrl), DornaRobotModel.DORNA2_BLACK)

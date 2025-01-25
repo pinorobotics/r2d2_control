@@ -28,6 +28,10 @@ source install/setup.zsh
 ros2 launch sainsmart-simulator simulate_launch.py
 ```
 
+# Documentation
+
+- [r2d2](https://github.com/pinorobotics/r2d2)
+
 # Usage
 ```
 r2d2_control [ <OPTIONS> ]
@@ -39,9 +43,12 @@ Options:
 
 `-controllerName=<string>` - name of the Dorna2 controller as it will appear to ROS nodes. Default: "dorna2_arm_controller"
 
+
+`-moveItConfigPath=<path>` - path to [r2d2_moveit_config](https://github.com/pinorobotics/r2d2_moveit_config) ROS package with MoveIt configuration of Dorna2 arm. Default: "../r2d2_moveit_config"
+
 `-broadcastRateInMillis=<int>` - how often to publish states of Dorna2 joints. Default: 100
 
-`-exportMetricsToElastic=<string>` - address of Elasticsearch where to emit metrics. Credentials can be part of the URL. Example "http://user:password@localhost:9200". Default: "https://127.0.0.1:9200";
+`-exportMetricsToElastic=<string>` - Elasticsearch URL where metrics will be emitted. Credentials can be part of the URL. Example "http://user:password@localhost:9200" (this option is ignored if "METRICS_ELASTIC_URL" environment variable is present)
 
 `-debug=<true|false>` - print debug information and log it to r2d2-control-debug.log inside system temporary folder. Default is "false".
 

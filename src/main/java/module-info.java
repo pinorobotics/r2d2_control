@@ -15,4 +15,5 @@ module r2d2.control {
     requires io.opentelemetry.sdk.metrics;
     requires id.opentelemetry.exporters.pack;
     requires io.opentelemetry.sdk;
+    requires jros2moveit;
 }
