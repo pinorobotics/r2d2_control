@@ -1,6 +1,6 @@
 plugins {
   id 'java'
-  id 'com.diffplug.spotless' version '6.25.0'
+  id 'com.diffplug.spotless' version '7.0.2'
 }
 
 repositories {
@@ -18,9 +18,9 @@ eclipse.classpath.file {
 }
 
 dependencies {
-  implementation "io.github.pinorobotics:jros2control:1.0-SNAPSHOT"
-  implementation "io.github.pinorobotics:jros2moveit:2.0-SNAPSHOT"
-  implementation "io.github.pinorobotics:drac:2.0-SNAPSHOT"
+  implementation "io.github.pinorobotics:jros2control:1.0"
+  implementation "io.github.pinorobotics:jros2moveit:2.0"
+  implementation "io.github.pinorobotics:drac:2.0"
   implementation "io.opentelemetry:opentelemetry-api:1.43.0"
   implementation "io.github.lambdaprime:id.opentelemetry-exporters-pack:4.0"
 }
@@ -90,5 +90,5 @@ classes.dependsOn spotlessApply
 // gradlew requires execution of gradle-wrapper.jar which trustworthy needs to
 // be checked everytime when it is updated (otherwise it do not seems secure)
 // To avoid using it we rely on manual version check
-if ("$gradle.gradleVersion" != "8.10.1")
+if ("$gradle.gradleVersion" != "8.13")
    throw new RuntimeException("Running gradle version $gradle.gradleVersion, required 8.10.1");
