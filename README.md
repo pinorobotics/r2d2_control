@@ -29,6 +29,7 @@ source install/setup.zsh
 # Documentation
 
 - [r2d2](https://github.com/pinorobotics/r2d2)
+- [Java based ROS2 controller for Dorna2 robotic arm](http://pinoweb.freetzi.com/jroscontrol/r2d2/index.html)
 
 # Usage
 ```
