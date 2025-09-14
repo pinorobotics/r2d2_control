@@ -40,7 +40,9 @@ Options:
 
 `-dornaUrl=<string>` - URL to Dorna2 robotic arm Command Server. Default: "ws://192.168.0.3:443"
 
-`-controllerName=<string>` - name of the Dorna2 controller as it will appear to ROS nodes. Default: "dorna2_arm_controller"
+`-trajectoryControllerName=<string>` - name of the Dorna2 trajectory controller as it will appear to ROS nodes. Default: "dorna2_arm_controller"
+
+`-positionControllerName=<string>` - name of the Dorna2 position controller (used mainly for MoveIt Servo) as it will appear to ROS nodes. Default: "dorna2_position_controller"
 
 `-moveItConfigPath=<path>` - path to [r2d2_moveit_config](https://github.com/pinorobotics/r2d2_moveit_config) ROS package with MoveIt configuration of Dorna2 arm. Default: "../r2d2_moveit_config"
 

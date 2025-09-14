@@ -48,6 +48,7 @@ import pinorobotics.jros2control.joint_trajectory_controller.ActuatorHardware;
 import pinorobotics.jros2control.joint_trajectory_controller.ActuatorHardware.JointState;
 import pinorobotics.jros2control.joint_trajectory_controller.JointStateBroadcaster;
 import pinorobotics.jros2control.joint_trajectory_controller.JointTrajectoryControllerFactory;
+import pinorobotics.jros2control.position_controllers.PositionControllerFactory;
 import pinorobotics.jros2moveit.moveit_config.MoveItConfigUtils;
 import pinorobotics.jros2moveit.moveit_config.models.Ros2Controller;
 import pinorobotics.jros2moveit.moveit_config.models.RosParameters;
@@ -60,21 +61,36 @@ public class Dorna2JointTrajectoryControllerApp {
             XLogger.getLogger(Dorna2JointTrajectoryControllerApp.class);
     private static final int DEFAULT_BROADCASTER_RATE_IN_MILLIS = 100;
     private static final String DEFAULT_DORNA_URL = "ws://192.168.0.3:443";
-    private static final String DEFAULT_CONTROLLER_NAME = "dorna2_arm_controller";
+    private static final String DEFAULT_TRAJECTORY_CONTROLLER_NAME = "dorna2_arm_controller";
+    private static final String DEFAULT_POSITION_CONTROLLER_NAME = "dorna2_position_controller";
 
     private MoveItConfigUtils moveItConfigUtils = new MoveItConfigUtils();
-    private String dornaUrl;
     private String elasticUrl;
-    private RosName controllerName;
+    private RosName trajectoryControllerName, positionControllerName;
     private Duration broadcasterRate;
     private Path moveitConfigPath;
     private List<String> joints = List.of();
+    private DornaClientConfig.Builder dornaConfigBuilder;
 
     public Dorna2JointTrajectoryControllerApp(CommandOptions properties) {
-        dornaUrl = properties.getOption("dornaUrl").orElse(DEFAULT_DORNA_URL);
+        LOGGER.info("Command options: {0}", properties);
+        dornaConfigBuilder =
+                new DornaClientConfig.Builder(
+                        URI.create(properties.getOption("dornaUrl").orElse(DEFAULT_DORNA_URL)),
+                        DornaRobotModel.DORNA2_BLACK);
+        properties.getOptionInt("dornaAcceleration").ifPresent(dornaConfigBuilder::acceleration);
+        properties.getOptionInt("dornaJerk").ifPresent(dornaConfigBuilder::jerk);
         elasticUrl = properties.getOption("exportMetricsToElastic").orElse("");
-        controllerName =
-                new RosName(properties.getOption("controllerName").orElse(DEFAULT_CONTROLLER_NAME));
+        trajectoryControllerName =
+                new RosName(
+                        properties
+                                .getOption("trajectoryControllerName")
+                                .orElse(DEFAULT_TRAJECTORY_CONTROLLER_NAME));
+        positionControllerName =
+                new RosName(
+                        properties
+                                .getOption("positionControllerName")
+                                .orElse(DEFAULT_POSITION_CONTROLLER_NAME));
         broadcasterRate =
                 Duration.ofMillis(
                         properties
@@ -110,7 +126,8 @@ public class Dorna2JointTrajectoryControllerApp {
     private void run() {
         var moveItConfig = moveItConfigUtils.read(moveitConfigPath);
         joints =
-                Optional.ofNullable(moveItConfig.ros2Controllers().get(controllerName.name()))
+                Optional.ofNullable(
+                                moveItConfig.ros2Controllers().get(trajectoryControllerName.name()))
                         .map(Ros2Controller::ros__parameters)
                         .map(RosParameters::joints)
                         .orElseThrow(
@@ -118,14 +135,14 @@ public class Dorna2JointTrajectoryControllerApp {
                                         new RuntimeException(
                                                 "Could not find joints inside moveit_configs for"
                                                         + " controller "
-                                                        + controllerName));
+                                                        + trajectoryControllerName));
         Function<String, RuntimeException> exceptionFactory =
                 jointName ->
                         new RuntimeException(
                                 "Joint with name "
                                         + jointName
                                         + " is not listed among joints of controller "
-                                        + controllerName);
+                                        + trajectoryControllerName);
         // sort initial positions with respect to "joints"
         var initialPositions =
                 moveItConfig.initialPositions().initialPositions().entrySet().stream()
@@ -143,7 +160,7 @@ public class Dorna2JointTrajectoryControllerApp {
                         .toList();
         setupMetrics();
         var dornaConfig =
-                new DornaClientConfig.Builder(URI.create(dornaUrl), DornaRobotModel.DORNA2_BLACK)
+                dornaConfigBuilder
                         //                .noopMode(true)
                         .build();
         var dornaClient = new DornaClientFactory().createClient(dornaConfig);
@@ -169,16 +186,25 @@ public class Dorna2JointTrajectoryControllerApp {
                                 joints,
                                 Optional.of(() -> toJointState(dornaClient.getLastMotion())),
                                 broadcasterRate);
-                var controller =
+                var trajectoryController =
                         new JointTrajectoryControllerFactory()
                                 .create(
                                         client,
                                         controllers,
                                         joints,
                                         initialPositions,
-                                        controllerName); ) {
+                                        trajectoryControllerName);
+                var positionController =
+                        new PositionControllerFactory()
+                                .create(
+                                        client,
+                                        controllers,
+                                        joints,
+                                        initialPositions,
+                                        positionControllerName); ) {
             jointStateBroadcaster.start();
-            controller.start();
+            trajectoryController.start();
+            positionController.start();
             CommandLineInterface.cli.askPressEnter();
         }
         // usually we need to close client once we are done
@@ -191,7 +217,7 @@ public class Dorna2JointTrajectoryControllerApp {
         return new JointState(
                 joints,
                 Arrays.copyOf(j, joints.size()),
-                Arrays.copyOf(new double[] {motion.vel()}, joints.size()));
+                Arrays.copyOf(new double[] {0}, joints.size()));
     }
 
     private static void usage() throws IOException {
